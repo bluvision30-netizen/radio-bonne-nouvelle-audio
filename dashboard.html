@@ -1603,6 +1603,7 @@ function clearAudioFile() {
 }
 
 // SOUMISSION DU FORMULAIRE
+// FONCTION DE DEBUG COMPLÈTE
 document.getElementById('programForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -1613,16 +1614,23 @@ document.getElementById('programForm').addEventListener('submit', async function
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication en cours...';
         submitBtn.disabled = true;
 
+        console.log('🚀 Début du processus d\'upload...');
+
+        // 1. VÉRIFIER LE FICHIER
         const audioFile = document.getElementById('programAudioFile').files[0];
+        console.log('📁 Fichier sélectionné:', audioFile);
         
         if (!audioFile) {
-            alert('Veuillez sélectionner un fichier audio');
+            alert('❌ Veuillez sélectionner un fichier audio');
             return;
         }
 
-        // Convertir le fichier en base64
+        // 2. CONVERTIR EN BASE64
+        console.log('🔄 Conversion en Base64...');
         const audioData = await fileToBase64(audioFile);
+        console.log('✅ Base64 généré, longueur:', audioData.length);
 
+        // 3. PRÉPARER LES DONNÉES
         const programData = {
             title: document.getElementById('programTitle').value,
             description: document.getElementById('programDescription').value,
@@ -1636,26 +1644,55 @@ document.getElementById('programForm').addEventListener('submit', async function
             }
         };
 
-        const result = await createProgram(programData);
+        console.log('📦 Données préparées:', programData);
+
+        // 4. APPEL API
+        console.log('🌐 Appel API create-program...');
+        const response = await fetch('/.netlify/functions/create-program', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(programData)
+        });
+
+        console.log('📡 Réponse HTTP:', response.status, response.statusText);
         
+        const result = await response.json();
+        console.log('📊 Résultat API:', result);
+
         if (result.success) {
-            alert('✅ Émission publiée avec succès! L\'audio est maintenant sur GitHub.');
+            alert('✅ Émission publiée avec succès!');
+            console.log('🎉 Publication réussie!');
             this.reset();
             clearAudioFile();
-            
-            // Actualiser la liste des émissions
             loadProgramsList();
         } else {
-            throw new Error(result.error);
+            throw new Error(result.error || 'Erreur inconnue');
         }
 
     } catch (error) {
-        console.error('Error:', error);
+        console.error('💥 Erreur complète:', error);
         alert('❌ Erreur: ' + error.message);
     } finally {
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     }
+});
+
+// FONCTION POUR VOIR LES LOGS EN TEMPS RÉEL
+function enableDebugMode() {
+    // Ouvrir la console automatiquement
+    console.log('🔧 Mode debug activé');
+    console.log('📋 Variables d\'environnement:');
+    console.log('- URL:', window.location.origin);
+    console.log('- Fonctions Netlify:', '/.netlify/functions/');
+}
+
+// Activer le debug au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    enableDebugMode();
+    loadProgramsList();
 });
 
 // CONVERSION FICHIER EN BASE64
@@ -1679,7 +1716,45 @@ async function createProgram(programData) {
     });
     return await response.json();
 }
+// Ajoute ce bouton de test dans ton dashboard
+async function testAllFunctions() {
+    console.log('🧪 Test complet des fonctions...');
+    
+    // Test 1: Fonction get-data
+    try {
+        const response1 = await fetch('/.netlify/functions/get-data?type=programs');
+        console.log('✅ get-data status:', response1.status);
+        const data1 = await response1.json();
+        console.log('📊 get-data result:', data1);
+    } catch (e) {
+        console.error('❌ get-data failed:', e);
+    }
+    
+    // Test 2: Fonction create-program (sans fichier)
+    try {
+        const testData = {
+            title: "TEST - Émission de test",
+            description: "Ceci est un test",
+            duration: "1:00",
+            speaker: "Testeur",
+            category: "enseignement",
+            audio_url: "https://example.com/test.mp3"
+        };
+        
+        const response2 = await fetch('/.netlify/functions/create-program', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(testData)
+        });
+        console.log('✅ create-program status:', response2.status);
+        const data2 = await response2.json();
+        console.log('📊 create-program result:', data2);
+    } catch (e) {
+        console.error('❌ create-program failed:', e);
+    }
+}
 
+// Appelle cette fonction depuis la console du navigateur
 // CHARGER LA LISTE DES ÉMISSIONS
 async function loadProgramsList() {
     try {
