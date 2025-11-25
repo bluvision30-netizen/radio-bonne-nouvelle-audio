@@ -2,18 +2,15 @@ const fs = require('fs');
 const path = require('path');
 
 exports.handler = async (event) => {
-  console.log('🚀 Début create-program - Debug mode');
-  console.log('📨 Méthode HTTP:', event.httpMethod);
-  console.log('📦 Body reçu:', event.body ? 'PRÉSENT' : 'ABSENT');
+  console.log('🚀 Début create-program - Version stable');
   
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   try {
-    // VÉRIFIER SI LE BODY EST VIDE
+    // VÉRIFIER LE BODY
     if (!event.body) {
-      console.log('❌ Body vide');
       return {
         statusCode: 400,
         body: JSON.stringify({ error: 'Body vide' })
@@ -23,86 +20,50 @@ exports.handler = async (event) => {
     let data;
     try {
       data = JSON.parse(event.body);
-      console.log('✅ JSON parsé avec succès');
-      console.log('📊 Clés des données:', Object.keys(data));
+      console.log('✅ JSON parsé');
     } catch (parseError) {
-      console.log('❌ Erreur parsing JSON:', parseError.message);
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'JSON invalide' })
+      };
+    }
+
+    // VALIDATION DES DONNÉES
+    const required = ['title', 'description', 'duration', 'speaker', 'category'];
+    const missing = required.filter(field => !data[field]);
+    
+    if (missing.length > 0) {
       return {
         statusCode: 400,
         body: JSON.stringify({ 
-          error: 'JSON invalide',
-          details: parseError.message 
+          error: 'Champs manquants', 
+          missing: missing 
         })
       };
     }
 
-    // VÉRIFIER LES DONNÉES OBLIGATOIRES
-    if (!data.title || !data.description || !data.duration || !data.speaker || !data.category) {
-      console.log('❌ Données manquantes:', {
-        title: !!data.title,
-        description: !!data.description,
-        duration: !!data.duration,
-        speaker: !!data.speaker,
-        category: !!data.category
-      });
-      
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ 
-          error: 'Données manquantes',
-          required: ['title', 'description', 'duration', 'speaker', 'category']
-        })
-      };
-    }
+    // GÉNÉRER UN NOM DE FICHIER UNIQUE
+    const fileName = `emission-${Date.now()}.mp3`;
+    const audioUrl = `https://raw.githubusercontent.com/tonusername/radio-bonne-nouvelle-audio/main/emissions/${fileName}`;
 
-    console.log('🎵 Données audio:', {
-      hasAudioFile: !!(data.audio_file && data.audio_file.data),
-      audioFileSize: data.audio_file?.data?.length || 0
-    });
+    console.log('🎵 URL audio générée:', audioUrl);
 
-    let audioUrl = "https://raw.githubusercontent.com/tonusername/radio-bonne-nouvelle-audio/main/emissions/default.mp3";
-
-    // ESSAYER L'UPLOAD AUDIO SI PRÉSENT
-    if (data.audio_file && data.audio_file.data && data.audio_file.name) {
-      try {
-        console.log('📤 Tentative upload audio...');
-        
-        const uploadResponse = await fetch(`https://radio-bonne-nouvelle-audio.netlify.app/.netlify/functions/upload-audio`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            audioData: data.audio_file.data,
-            fileName: data.audio_file.name.replace(/\s+/g, '-'), // Remplacer espaces par -
-            commitMessage: `🎵 ${data.title}`
-          })
-        });
-
-        console.log('📡 Statut upload:', uploadResponse.status);
-        
-        if (uploadResponse.ok) {
-          const uploadResult = await uploadResponse.json();
-          console.log('✅ Upload réussi:', uploadResult);
-          
-          if (uploadResult.success) {
-            audioUrl = uploadResult.audio_url;
-          }
-        } else {
-          console.warn('⚠️ Upload échoué, statut:', uploadResponse.status);
-        }
-      } catch (uploadError) {
-        console.warn('⚠️ Erreur upload:', uploadError.message);
-      }
-    }
-
-    // CRÉER LE PROGRAMME
+    // SAUVEGARDER DANS JSON
     const programsPath = path.join(process.cwd(), 'public', 'data', 'programs.json');
+    
+    // CRÉER LE DOSSIER SI IL N'EXISTE PAS
+    const dataDir = path.dirname(programsPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
     
     let programsData = { programs: [] };
     if (fs.existsSync(programsPath)) {
-      programsData = JSON.parse(fs.readFileSync(programsPath, 'utf8'));
+      try {
+        programsData = JSON.parse(fs.readFileSync(programsPath, 'utf8'));
+      } catch (e) {
+        console.warn('⚠️ Erreur lecture JSON, création nouveau fichier');
+      }
     }
     
     const newProgram = {
@@ -116,31 +77,46 @@ exports.handler = async (event) => {
       image_url: data.image_url || "https://res.cloudinary.com/demo/image/upload/v1633452348/sample.jpg",
       date: new Date().toISOString().split('T')[0],
       published: true,
-      type: 'recorded'
+      type: 'recorded',
+      // INSTRUCTIONS POUR L'UPLOAD MANUEL
+      upload_instructions: `📤 Uploadez manuellement le fichier audio vers GitHub: ${fileName}`
     };
     
-    console.log('💾 Sauvegarde du programme:', newProgram.title);
+    console.log('💾 Création programme:', newProgram.title);
     
     programsData.programs.unshift(newProgram);
+    
+    // SAUVEGARDER
     fs.writeFileSync(programsPath, JSON.stringify(programsData, null, 2));
+    console.log('✅ Programme sauvegardé');
     
     return {
       statusCode: 200,
       body: JSON.stringify({ 
         success: true, 
-        message: 'Émission publiée!',
+        message: 'Émission créée! Upload manuel requis.',
         program: newProgram,
-        audio_uploaded: audioUrl !== "https://raw.githubusercontent.com/tonusername/radio-bonne-nouvelle-audio/main/emissions/default.mp3"
+        instructions: {
+          file_name: fileName,
+          github_repo: process.env.GITHUB_REPO,
+          steps: [
+            "1. Aller sur GitHub",
+            "2. Uploader le fichier audio dans le dossier 'emissions'",
+            `3. Nom du fichier: ${fileName}`,
+            "4. Le site se mettra à jour automatiquement"
+          ]
+        }
       })
     };
     
   } catch (error) {
-    console.error('💥 Erreur fatale:', error);
+    console.error('💥 Erreur create-program:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ 
-        error: 'Erreur serveur',
-        details: error.message 
+        error: 'Erreur interne',
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       })
     };
   }
