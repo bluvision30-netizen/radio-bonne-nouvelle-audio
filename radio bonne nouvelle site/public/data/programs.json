@@ -1,0 +1,17 @@
+{
+  "programs": [
+    {
+      "id": "1",
+      "title": "Étude Biblique - La Foi",
+      "description": "Enseignement profond sur la foi qui déplace les montagnes",
+      "audio_url": "https://raw.githubusercontent.com/tonuser/radio-audio/main/emissions/etude-foi.mp3",
+      "duration": "45:30",
+      "speaker": "Pasteur Jean",
+      "category": "enseignement",
+      "image_url": "https://res.cloudinary.com/toncloud/image/upload/v1/radio/etude-biblique.jpg",
+      "date": "2024-11-25",
+      "published": true,
+      "type": "recorded"
+    }
+  ]
+}
