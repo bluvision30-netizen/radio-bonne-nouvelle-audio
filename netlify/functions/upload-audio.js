@@ -1,5 +1,3 @@
-const { Octokit } = require('@octokit/rest');
-
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -8,22 +6,28 @@ exports.handler = async (event) => {
   try {
     const { audioData, fileName, commitMessage } = JSON.parse(event.body);
     
-    // Configuration GitHub
-    const octokit = new Octokit({
-      auth: process.env.GITHUB_TOKEN
+    const [owner, repo] = process.env.GITHUB_REPO.split('/');
+    const token = process.env.GITHUB_TOKEN;
+
+    // Upload direct vers GitHub sans octokit
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/emissions/${fileName}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: commitMessage || `Ajout emission: ${fileName}`,
+        content: audioData, // Base64 sans le prefix
+        branch: 'main'
+      })
     });
 
-    const [owner, repo] = process.env.GITHUB_REPO.split('/');
-    
-    // Upload vers GitHub
-    const response = await octokit.repos.createOrUpdateFileContents({
-      owner,
-      repo,
-      path: `emissions/${fileName}`,
-      message: commitMessage || `Ajout emission: ${fileName}`,
-      content: audioData, // Base64
-      branch: 'main'
-    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || 'Upload failed');
+    }
 
     // Générer le lien RAW
     const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/emissions/${fileName}`;
@@ -33,7 +37,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         audio_url: rawUrl,
-        download_url: response.data.content.download_url
+        download_url: result.content.download_url
       })
     };
 
@@ -41,7 +45,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       body: JSON.stringify({ 
-        error: 'Upload failed', 
+        error: 'Upload échoué', 
         details: error.message 
       })
     };
