@@ -1544,7 +1544,74 @@ async function startLiveStream(facebookUrl) {
     // Mettre à jour l'interface
   }
 }
+// FONCTION MANQUANTE - AJOUTE ÇA
+function displayPrograms(programs) {
+  const container = document.getElementById('programsList');
+  if (!container) {
+    console.log('❌ Container programsList non trouvé');
+    return;
+  }
+  
+  console.log('📊 Affichage de', programs.length, 'programmes');
+  
+  if (programs.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2rem; color: #666;">
+        <i class="fas fa-microphone-slash" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+        <h3>Aucune émission publiée</h3>
+        <p>Utilisez le formulaire ci-dessus pour créer votre première émission</p>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Titre</th>
+          <th>Animateur</th>
+          <th>Durée</th>
+          <th>Date</th>
+          <th>Audio</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${programs.map(program => `
+          <tr>
+            <td><strong>${program.title}</strong></td>
+            <td>${program.speaker}</td>
+            <td>${program.duration}</td>
+            <td>${program.date}</td>
+            <td>
+              <span class="badge ${program.audio_url.includes('default.mp3') ? 'badge-warning' : 'badge-success'}">
+                ${program.audio_url.includes('default.mp3') ? 'Défaut' : 'GitHub'}
+              </span>
+            </td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="playProgram('${program.audio_url}')">
+                <i class="fas fa-play"></i>
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteProgram('${program.id}')">
+                <i class="fas fa-trash"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
 
+// FONCTION POUR SUPPRIMER UN PROGRAMME
+function deleteProgram(programId) {
+  if (confirm('Êtes-vous sûr de vouloir supprimer cette émission ?')) {
+    console.log('🗑️ Suppression programme:', programId);
+    // À implémenter plus tard
+    alert('Fonction suppression à implémenter');
+  }
+}
 // EXEMPLE: Publier une émission
 async function publishProgram() {
   const programData = {
@@ -1611,75 +1678,102 @@ document.getElementById('programForm').addEventListener('submit', async function
     const originalText = submitBtn.innerHTML;
     
     try {
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication en cours...';
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publication...';
         submitBtn.disabled = true;
 
-        console.log('🚀 Début du processus d\'upload...');
+        console.log('🚀 Début processus...');
 
-        // 1. VÉRIFIER LE FICHIER
+        // RÉCUPÉRER LE FICHIER
         const audioFile = document.getElementById('programAudioFile').files[0];
-        console.log('📁 Fichier sélectionné:', audioFile);
         
         if (!audioFile) {
             alert('❌ Veuillez sélectionner un fichier audio');
             return;
         }
 
-        // 2. CONVERTIR EN BASE64
-        console.log('🔄 Conversion en Base64...');
-        const audioData = await fileToBase64(audioFile);
-        console.log('✅ Base64 généré, longueur:', audioData.length);
-
-        // 3. PRÉPARER LES DONNÉES
-        const programData = {
+        // VÉRIFIER LES CHAMPS OBLIGATOIRES
+        const requiredFields = {
             title: document.getElementById('programTitle').value,
             description: document.getElementById('programDescription').value,
             duration: document.getElementById('programDuration').value,
             speaker: document.getElementById('programSpeaker').value,
-            category: document.getElementById('programCategory').value,
+            category: document.getElementById('programCategory').value
+        };
+
+        for (const [field, value] of Object.entries(requiredFields)) {
+            if (!value) {
+                alert(`❌ Le champ "${field}" est obligatoire`);
+                return;
+            }
+        }
+
+        console.log('✅ Tous les champs sont remplis');
+
+        // CONVERTIR EN BASE64
+        const audioData = await fileToBase64(audioFile);
+        console.log('📦 Base64 généré');
+
+        // PRÉPARER LES DONNÉES
+        const programData = {
+            title: requiredFields.title,
+            description: requiredFields.description,
+            duration: requiredFields.duration,
+            speaker: requiredFields.speaker,
+            category: requiredFields.category,
             image_url: document.getElementById('programImageUrl').value,
             audio_file: {
-                name: audioFile.name,
-                data: audioData.split(',')[1] // Enlever le prefix base64
+                name: audioFile.name.replace(/\s+/g, '-'), // Remplacer espaces
+                data: audioData.split(',')[1]
             }
         };
 
-        console.log('📦 Données préparées:', programData);
-
-        // 4. APPEL API
-        console.log('🌐 Appel API create-program...');
+        console.log('📤 Envoi des données...');
+        
+        // APPEL API
         const response = await fetch('/.netlify/functions/create-program', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+            headers: { 
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(programData)
         });
 
-        console.log('📡 Réponse HTTP:', response.status, response.statusText);
-        
-        const result = await response.json();
-        console.log('📊 Résultat API:', result);
+        console.log('📡 Statut réponse:', response.status);
+
+        let result;
+        try {
+            result = await response.json();
+            console.log('📊 Réponse JSON:', result);
+        } catch (jsonError) {
+            console.error('❌ Erreur parsing JSON:', jsonError);
+            throw new Error('Réponse serveur invalide');
+        }
 
         if (result.success) {
-            alert('✅ Émission publiée avec succès!');
-            console.log('🎉 Publication réussie!');
+            let message = '✅ Émission publiée avec succès!';
+            if (result.audio_uploaded) {
+                message += '\n🎵 Audio uploadé vers GitHub';
+            } else {
+                message += '\n⚠️ Audio non uploadé (utilisation défaut)';
+            }
+            
+            alert(message);
             this.reset();
-            clearAudioFile();
+            clearFile('audio');
+            clearFile('image');
             loadProgramsList();
         } else {
-            throw new Error(result.error || 'Erreur inconnue');
+            throw new Error(result.error || result.details || 'Erreur inconnue');
         }
 
     } catch (error) {
-        console.error('💥 Erreur complète:', error);
+        console.error('💥 Erreur:', error);
         alert('❌ Erreur: ' + error.message);
     } finally {
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     }
 });
-
 // FONCTION POUR VOIR LES LOGS EN TEMPS RÉEL
 function enableDebugMode() {
     // Ouvrir la console automatiquement
